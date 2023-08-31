@@ -147,5 +147,14 @@ def main():
         loaded_model.eval()  # Set model to evaluation mode
 
 
+        # Log in to Hugging Face
+        !huggingface-cli login
+
+        print("J'ai deja un repertoire sur huggingface")
+
+        # Upload the model and config to the repository
+        !huggingface-cli upload {'/content/drive/MyDrive/bert_model.pth'} --repo {Fatou}/{Custom-Bert-Model}
+        !huggingface-cli upload {'/content/drive/MyDrive/config.pth'} --repo {Fatou}/{Custom-Bert-Model}
+
 if __name__ == '__main__':
     main()
