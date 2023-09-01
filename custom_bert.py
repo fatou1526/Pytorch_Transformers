@@ -1,22 +1,23 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertModel, AutoTokenizer, BertConfig
+from transformers import BertModel, AutoTokenizer
 from torch.optim import AdamW
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 import pandas as pd
-import json
 from tqdm import tqdm
 import wandb   #for monitoring
 import huggingface_hub
+from huggingface_hub import PyTorchModelHubMixin
 
 config = {
-    "model_name": "bert-base-uncased",
+    "model_name": "nlptown/bert-base-multilingual-uncased-sentiment",
     "max_length": 80,
     "csvfile": "/content/drive/MyDrive/toxic_comments.csv",
     "batch_size": 2,
     "learning_rate": 2e-5,
     "n_epochs": 1,
+    "n_classes": 1,
     "device": torch.device("cuda" if torch.cuda.is_available else "cpu")
 
 }
@@ -47,11 +48,11 @@ def dataloader(dataset, batch_size, shuffle):
 
     return DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle)
 
-class CustomBertModel(nn.Module):
-    def __init__(self, model_name, n_classes):
+class CustomBertModel(nn.Module, PyTorchModelHubMixin):
+    def __init__(self):
         super(CustomBertModel, self).__init__()
-        self.pretrained_model = BertModel.from_pretrained(model_name)   # bert base 768 hidden state
-        self.classifier = nn.Linear(768, n_classes)  # MLP
+        self.pretrained_model = BertModel.from_pretrained(config['model_name'])   # bert base 768 hidden state
+        self.classifier = nn.Linear(768, config['n_classes'])  # MLP
 
     def forward(self, input_ids, attention_mask):
 
@@ -111,6 +112,9 @@ def validation_step(model, validation_loader, loss_fn, device):
 
 def main():
 
+    tokenizer = AutoTokenizer.from_pretrained(config["model_name"])
+
+    wandb.init(project="bert-classification")
 
     dataset = MyDataset(config['csvfile'], config['model_name'], config['max_length'])
 
@@ -136,25 +140,31 @@ def main():
         loss_train = train_step(model, train_loader, optimizer, loss_fn, config['device'])
         loss_validation, accuracy = validation_step(model, validation_loader, loss_fn, config['device'])
 
-        # Save Model Locally (in Google Drive)
-        torch.save(model.state_dict(), '/content/drive/MyDrive/custom_bert_model.pth')
-        torch.save(config, '/content/drive/MyDrive/training_config.pth')
-
-        # Load Model
-        loaded_model = CustomBertModel(config['model_name'], n_classes=1)
-        loaded_model.load_state_dict(torch.load('/content/drive/MyDrive/custom_bert_model.pth'))
-        loaded_model.to(config['device'])
-        loaded_model.eval()  # Set model to evaluation mode
+        wandb.log({
+            "loss_train": loss_train,
+            "loss_validation": loss_validation,
+            "accuracy": accuracy
+        })
 
 
-        # Log in to Hugging Face
-        !huggingface-cli login
+    # Push model to the Hub (Note that we should login before pushing by using the command huggingface-cli login)
+    model.push_to_hub("Fatou/Custom-Bert-Model")
+    tokenizer.push_to_hub("Fatou/Custom-Bert-Model")
+    #model.pretrained_model.config.push_to_hub("Fatou/Custom-Bert-Model")
 
-        print("J'ai deja un repertoire sur huggingface")
+    print("Congrats, your pytorch model and the tokenizer have been pushed successfully")
 
-        # Upload the model and config to the repository
-        !huggingface-cli upload {'/content/drive/MyDrive/bert_model.pth'} --repo {Fatou}/{Custom-Bert-Model}
-        !huggingface-cli upload {'/content/drive/MyDrive/config.pth'} --repo {Fatou}/{Custom-Bert-Model}
+    # What follows could be out of the method main()
+
+    # This is a way to load the model and its tokenizer
+    model_loaded = CustomBertModel.from_pretrained("Fatou/Custom-Bert-Model")
+    tokenizer_loaded = AutoTokenizer.from_pretrained("Fatou/Custom-Bert-Model")
+
+    # This is a way to make predictions from the loaded model and tokenizer
+    inputs = tokenizer_loaded("Hello, my dog is cute", return_tensors="pt")
+    outputs = model_loaded(inputs['input_ids'], inputs['attention_mask'])
+    pred = torch.max(torch.softmax(outputs, dim=1), dim=1)
+    pred.indices.item()
 
 if __name__ == '__main__':
     main()
