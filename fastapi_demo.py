@@ -53,7 +53,7 @@ class InputText(BaseModel):
 
 @app.post("/predict")
 def predict_sentiment(data: InputText):
-    text = str(data.text)
+    text = data.text
     prediction_dict= predict(text)
     return prediction_dict
 
