@@ -6,11 +6,11 @@ import torch.nn as nn
 from transformers import AutoTokenizer, BertModel
 from huggingface_hub import PyTorchModelHubMixin
 
-app = FastAPI()
-    
+app = FastAPI()    
+
 model_loaded = CustomBertModel.from_pretrained("Fatou/Custom-Bert-Model")
-tokenizer_loaded = AutoTokenizer.from_pretrained("Fatou/Custom-Bert-Model")
-    
+tokenizer_loaded = AutoTokenizer.from_pretrained("Fatou/Custom-Bert-Model") 
+
 classes = ["no toxic", "toxic"]
 
 def predict(text):
@@ -23,7 +23,6 @@ def predict(text):
     return {"indice": pred.indices.item(),
             "classe": classes[pred.indices.item()]
             }
-
 
 class InputText(BaseModel):
     text: str
